@@ -35,9 +35,13 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
 import android.widget.TableLayout;
 import android.widget.TextView;
 
+import cn.readsense.body.ReadBody;
+import tv.danmaku.ijk.media.example.view.RectanglesView;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 import tv.danmaku.ijk.media.player.misc.ITrackInfo;
 import tv.danmaku.ijk.media.example.R;
@@ -64,6 +68,8 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
     private Settings mSettings;
     private boolean mBackPressed;
 
+    private RectanglesView mRectanglesView;
+
     public static Intent newIntent(Context context, String videoPath, String videoTitle) {
         Intent intent = new Intent(context, VideoActivity.class);
         intent.putExtra("videoPath", videoPath);
@@ -78,6 +84,9 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        //requestWindowFeature(Window.FEATURE_NO_TITLE);
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.
+                LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.activity_player);
 
         mSettings = new Settings(this);
@@ -137,7 +146,9 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
         IjkMediaPlayer.loadLibrariesOnce(null);
         IjkMediaPlayer.native_profileBegin("libijkplayer.so");
 
+        mRectanglesView = (RectanglesView) findViewById(R.id.rectangle_view);
         mVideoView = (IjkVideoView) findViewById(R.id.video_view);
+        mVideoView.setRectanglesView(mRectanglesView);
         mVideoView.setMediaController(mMediaController);
         mVideoView.setHudView(mHudView);
         // prefer mVideoPath
@@ -151,6 +162,13 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
             return;
         }
         mVideoView.start();
+        long result = ReadBody.nativeCreateObject(this);
+        if (result == 0) {
+            Log.d(TAG, "init body track success");
+        } else {
+            Log.d(TAG, "init body track failed");
+        }
+
     }
 
     @Override
@@ -172,6 +190,12 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
             mVideoView.enterBackground();
         }
         IjkMediaPlayer.native_profileEnd();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        ReadBody.nativeDestroyObject();
     }
 
     @Override

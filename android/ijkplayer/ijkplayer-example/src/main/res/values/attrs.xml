@@ -5,4 +5,9 @@
     <declare-styleable name="IjkListPreference">
         <attr name="entrySummaries" />
     </declare-styleable>
+
+    <declare-styleable name="RectanglesView">
+        <attr name="rectanglesColor" format="color"/>
+        <attr name="rectanglesStrokeWidth" format="dimension"/>
+    </declare-styleable>
 </resources>

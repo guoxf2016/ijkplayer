@@ -2233,7 +2233,7 @@ static int ffplay_video_thread(void *arg)
             goto the_end;
         if (!ret)
             continue;
-        av_log(NULL, AV_LOG_DEBUG, "ffplay_video_thread: frame copy before %d\n", frame->format);
+        av_log(NULL, AV_LOG_DEBUG, "ffplay_video_thread: frame copy before %d %d %d \n", frame->format, frame->width, frame->height);
         if (!memcmp(video_frame_data, "empty", strlen("empty")) && frame->data && frame->width && frame->height)
         {
             int frame_len = frame->width * frame->height;
@@ -2242,8 +2242,8 @@ static int ffplay_video_thread(void *arg)
             uint8_t * vp = video_frame_data + frame_len * 5 / 4;
             int j = 0;
             for(int i=0 ; i < frame_len / 4 ; i++) {
-                *(video_frame_data + frame_len + j) = *(frame->data[1] + i);
-                *(video_frame_data + frame_len + (++j)) = *(frame->data[2] + i);
+                *(video_frame_data + frame_len + j) = *(frame->data[2] + i);
+                *(video_frame_data + frame_len + (++j)) = *(frame->data[1] + i);
                 j++;
             }
             ffp_notify_msg4(ffp, FFP_MSG_VIDEO_FRAME, frame->width, frame->height, &video_frame_data, sizeof(uint8_t**));

@@ -23,6 +23,7 @@ import android.content.DialogInterface;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -65,12 +66,20 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import cn.readsense.body.Body;
+import cn.readsense.body.ReadBody;
+import cn.readsense.body.SupportImageFormat;
+import io.reactivex.Flowable;
 import io.reactivex.Observable;
 import io.reactivex.ObservableEmitter;
 import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.Scheduler;
+import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.functions.Consumer;
+import io.reactivex.functions.Function;
+import io.reactivex.functions.Predicate;
 import io.reactivex.schedulers.Schedulers;
+import tv.danmaku.ijk.media.example.view.RectanglesView;
 import tv.danmaku.ijk.media.exo.IjkExoMediaPlayer;
 import tv.danmaku.ijk.media.player.AndroidMediaPlayer;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
@@ -86,7 +95,7 @@ import tv.danmaku.ijk.media.example.application.Settings;
 import tv.danmaku.ijk.media.example.services.MediaPlayerService;
 
 public class IjkVideoView extends FrameLayout implements MediaController.MediaPlayerControl {
-    private String TAG = "IjkVideoView";
+    private static final String TAG = "IjkVideoView";
     // settable by the client
     private Uri mUri;
     private Map<String, String> mHeaders;
@@ -1061,8 +1070,8 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             if (outer == null) return;
             switch (msg.what) {
                 case FRAME:
-                    Log.d("guo", "FRAME " + ((byte[])msg.obj).length);
-                    outer.saveBitmap((byte[])(msg.obj), msg.arg1, msg.arg2);
+                    Log.d(TAG, "FRAME " + ((byte[])msg.obj).length);
+                    outer.track((byte[])(msg.obj), msg.arg1, msg.arg2);
                     break;
                 default:
                     throw new UnsupportedOperationException("wrong case");
@@ -1112,6 +1121,29 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             0L, TimeUnit.MILLISECONDS,
             new ArrayBlockingQueue<Runnable>(1));
 
+    private void track(final byte[] data, final int width, final int height) {
+        //Log.d(TAG, "body " + bodies.toString());
+
+        if (mRectanglesView == null) {
+            return;
+        }
+
+        Flowable.just(new ArrayList<Body>()).map(new Function<List<Body>, List<Body>>() {
+            @Override
+            public List<Body> apply(List<Body> list) {
+                ReadBody.nativeDetect(data, SupportImageFormat.NV21,width, height, 0, list);
+                mRectanglesView.setScale((float)getWidth() / width, (float) getHeight() / height);
+                return list;
+            }
+        }).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread()).subscribe(new Consumer<List<Body>>() {
+            @Override
+            public void accept(List<Body> list) {
+                mRectanglesView.setBody(list);
+            }
+        });
+
+    }
+
     private int count = 0;
 
     private void saveBitmap(final byte[] data, final int width, final int hegith) {
@@ -1122,7 +1154,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     if (count == 3) {
                         return;
                     }
-                    Log.d("guo", "save data size " + data.length);
+                    Log.d(TAG, "save data size " + data.length);
                     if (data.length == 0) return;
                     final Bitmap bitmap = rawByteArray2RGBABitmap2(data, width, hegith);
                     if (bitmap == null) return;
@@ -1132,7 +1164,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                         out = new FileOutputStream(file);
                         bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out);
                     } catch (FileNotFoundException e) {
-                        Log.d("guo", "exception " + e.getMessage());
+                        Log.d(TAG, "exception " + e.getMessage());
                     }
                     try {
                         if (out != null) {
@@ -1140,7 +1172,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                             out.close();
                         }
                     } catch (IOException e) {
-                        Log.d("guo", "exception " + e.getMessage());
+                        Log.d(TAG, "exception " + e.getMessage());
                     }
                     bitmap.recycle();
                     count++;
@@ -1148,7 +1180,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             });
 
         } catch (RejectedExecutionException re) {
-            Log.d("guo", "exception " + re.getMessage());
+            Log.d(TAG, "exception " + re.getMessage());
         }
 
     }
@@ -1229,8 +1261,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     ijkMediaPlayer.setOnFrameCallback(new IjkMediaPlayer.OnFrameCallback() {
                         @Override
                         public void onFrame(final byte[] data, int width, int height) {
-                            //Log.d("guo", "data size " + data.length);
-                            //setFrame(data);
+                            //Log.d(TAG, "data size " + data.length);
                             Message.obtain(mHandler, FRAME, width, height, data).sendToTarget();
                         }
                     });
@@ -1422,5 +1453,11 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     public int getSelectedTrack(int trackType) {
         return MediaPlayerCompat.getSelectedTrack(mMediaPlayer, trackType);
+    }
+
+    private RectanglesView mRectanglesView;
+
+    public void setRectanglesView(RectanglesView view) {
+        this.mRectanglesView = view;
     }
 }
