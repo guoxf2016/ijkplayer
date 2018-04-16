@@ -897,7 +897,7 @@ static void message_loop_n(JNIEnv *env, IjkMediaPlayer *mp)
 {
     jobject weak_thiz = (jobject) ijkmp_get_weak_thiz(mp);
     JNI_CHECK_GOTO(weak_thiz, env, NULL, "mpjni: message_loop_n: null weak_thiz", LABEL_RETURN);
-
+    
     while (1) {
         AVMessage msg;
 
@@ -1018,6 +1018,33 @@ static void message_loop_n(JNIEnv *env, IjkMediaPlayer *mp)
         case FFP_MSG_AUDIO_SEEK_RENDERING_START:
             MPTRACE("FFP_MSG_AUDIO_SEEK_RENDERING_START:\n");
             post_event(env, weak_thiz, MEDIA_INFO, MEDIA_INFO_AUDIO_SEEK_RENDERING_START, msg.arg1);
+            break;
+        case FFP_MSG_VIDEO_FRAME:
+            if (msg.obj)
+            {
+                uint8_t *data_in = *((uint8_t**)(msg.obj));
+                //uint8_t *data_in_copy = (uint8_t *)malloc(msg.arg1);
+                //memcpy(data_in_copy, data_in, msg.arg1);
+                MPTRACE("FFP_MSG_VIDEO_FRAME: OX%p\n", data_in);
+                int out_len = msg.arg1 * msg.arg2 * 3 / 2;
+                if (data_in)
+                {
+                    jbyteArray data_out = NULL;
+                    data_out = (*env)->NewByteArray(env, out_len);
+                    if (data_out == NULL)
+                    {
+                        JNI_CHECK_GOTO(data_out, env, "java/lang/OutOfMemoryError", "mpjni: message_loop_n: frame data oom", LABEL_RETURN);
+                    }
+                    else
+                    {
+                        (*env)->SetByteArrayRegion(env, data_out, 0, out_len, (jbyte *)(data_in));
+                        post_event2(env, weak_thiz, MEDIA_VIDEO_FRAME, msg.arg1, msg.arg2, data_out);
+                        (*env)->DeleteLocalRef(env, data_out);
+                    }
+                    memcpy(data_in, "empty", strlen("empty"));
+                    //free(data_in_copy);
+                }
+            }
             break;
         default:
             ALOGE("unknown FFP_MSG_xxx(%d)\n", msg.what);

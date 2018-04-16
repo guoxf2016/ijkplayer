@@ -138,6 +138,11 @@ int64_t get_valid_channel_layout(int64_t channel_layout, int channels)
 }
 #endif
 
+#define FRAME_BUFER_SIZE (2000 * 2000 * 3 / 2)
+
+static uint8_t *video_frame_data;
+
+
 static void free_picture(Frame *vp);
 
 static int packet_queue_put_private(PacketQueue *q, AVPacket *pkt)
@@ -2187,6 +2192,16 @@ static int ffplay_video_thread(void *arg)
     int64_t last_dst_pts = -1;
     int retry_convert_image = 0;
     int convert_frame_count = 0;
+    if (video_frame_data) {
+        free(video_frame_data);
+    }
+    video_frame_data = (uint8_t*)malloc(FRAME_BUFER_SIZE);
+
+    if (!video_frame_data) {
+        av_log(video_frame_data, AV_LOG_DEBUG, "ffplay_video_thread: video_frame_data malloc\n");
+    }
+    memset(video_frame_data, (uint8_t)0, FRAME_BUFER_SIZE);
+    memcpy(video_frame_data, "empty", strlen("empty"));
 
 #if CONFIG_AVFILTER
     AVFilterGraph *graph = avfilter_graph_alloc();
@@ -2218,7 +2233,22 @@ static int ffplay_video_thread(void *arg)
             goto the_end;
         if (!ret)
             continue;
-
+        av_log(NULL, AV_LOG_DEBUG, "ffplay_video_thread: frame copy before %d\n", frame->format);
+        if (!memcmp(video_frame_data, "empty", strlen("empty")) && frame->data && frame->width && frame->height)
+        {
+            int frame_len = frame->width * frame->height;
+            memcpy(video_frame_data, (frame->data)[0], frame_len);
+            uint8_t * up = video_frame_data + frame_len;
+            uint8_t * vp = video_frame_data + frame_len * 5 / 4;
+            int j = 0;
+            for(int i=0 ; i < frame_len / 4 ; i++) {
+                *(video_frame_data + frame_len + j) = *(frame->data[1] + i);
+                *(video_frame_data + frame_len + (++j)) = *(frame->data[2] + i);
+                j++;
+            }
+            ffp_notify_msg4(ffp, FFP_MSG_VIDEO_FRAME, frame->width, frame->height, &video_frame_data, sizeof(uint8_t**));
+            //memcpy(data, "empty", 5);
+        }
         if (ffp->get_frame_mode) {
             if (!ffp->get_img_info || ffp->get_img_info->count <= 0) {
                 av_frame_unref(frame);
@@ -3472,7 +3502,7 @@ static int read_thread(void *arg)
             }
             /* wait 10 ms */
             SDL_LockMutex(wait_mutex);
-            SDL_CondWaitTimeout(is->continue_read_thread, wait_mutex, 10);
+            //SDL_CondWaitTimeout(is->continue_read_thread, wait_mutex, 10);
             SDL_UnlockMutex(wait_mutex);
             continue;
         }
@@ -3559,7 +3589,7 @@ static int read_thread(void *arg)
                 SDL_Delay(100);
             }
             SDL_LockMutex(wait_mutex);
-            SDL_CondWaitTimeout(is->continue_read_thread, wait_mutex, 10);
+            //SDL_CondWaitTimeout(is->continue_read_thread, wait_mutex, 10);
             SDL_UnlockMutex(wait_mutex);
             ffp_statistic_l(ffp);
             continue;

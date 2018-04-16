@@ -21,10 +21,16 @@ import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Message;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AlertDialog;
 import android.text.TextUtils;
@@ -40,14 +46,31 @@ import android.widget.TableLayout;
 import android.widget.TextView;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import io.reactivex.Observable;
+import io.reactivex.ObservableEmitter;
+import io.reactivex.ObservableOnSubscribe;
+import io.reactivex.Scheduler;
+import io.reactivex.functions.Consumer;
+import io.reactivex.schedulers.Schedulers;
 import tv.danmaku.ijk.media.exo.IjkExoMediaPlayer;
 import tv.danmaku.ijk.media.player.AndroidMediaPlayer;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
@@ -338,7 +361,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     (TextUtils.isEmpty(scheme) || scheme.equalsIgnoreCase("file"))) {
                 IMediaDataSource dataSource = new FileMediaDataSource(new File(mUri.toString()));
                 mMediaPlayer.setDataSource(dataSource);
-            }  else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
                 mMediaPlayer.setDataSource(mAppContext, mUri, mHeaders);
             } else {
                 mMediaPlayer.setDataSource(mUri.toString());
@@ -566,9 +589,9 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                                 .setPositiveButton(R.string.VideoView_error_button,
                                         new DialogInterface.OnClickListener() {
                                             public void onClick(DialogInterface dialog, int whichButton) {
-                                            /* If we get here, there is no onError listener, so
-                                             * at least inform them that the video is over.
-                                             */
+                                                /* If we get here, there is no onError listener, so
+                                                 * at least inform them that the video is over.
+                                                 */
                                                 if (mOnCompletionListener != null) {
                                                     mOnCompletionListener.onCompletion(mMediaPlayer);
                                                 }
@@ -1016,6 +1039,120 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
         return text;
     }
 
+    private volatile boolean flag = false;
+
+    private static final int FRAME = 100;
+
+    private final FrameHandler mHandler = new FrameHandler(this);
+
+    private static class FrameHandler extends Handler {
+
+        private WeakReference<IjkVideoView> mOuter;
+
+        public FrameHandler(IjkVideoView outer) {
+            super(new FrameHandlerThread("FrameHandlerThread").getLooper());
+            mOuter = new WeakReference<>(outer);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            //super.handleMessage(msg);
+            IjkVideoView outer = mOuter.get();
+            if (outer == null) return;
+            switch (msg.what) {
+                case FRAME:
+                    Log.d("guo", "FRAME " + ((byte[])msg.obj).length);
+                    outer.saveBitmap((byte[])(msg.obj), msg.arg1, msg.arg2);
+                    break;
+                default:
+                    throw new UnsupportedOperationException("wrong case");
+            }
+        }
+    }
+
+    private static class FrameHandlerThread extends HandlerThread {
+
+        public FrameHandlerThread(String name) {
+            super(name);
+            start();
+        }
+
+    }
+
+    public Bitmap rawByteArray2RGBABitmap2(byte[] data, int width, int height) {
+        int frameSize = width * height;
+        int[] rgba = new int[frameSize];
+
+        for (int i = 0; i < height; i++)
+            for (int j = 0; j < width; j++) {
+                int y = (0xff & ((int) data[i * width + j]));
+                int u = (0xff & ((int) data[frameSize + (i >> 1) * width + (j & ~1)]));
+                //int u = 0;
+                int v = (0xff & ((int) data[frameSize + (i >> 1) * width + (j & ~1) + 1]));
+                //int v = 0;
+                y = y < 16 ? 16 : y;
+
+                int r = Math.round(1.164f * (y - 16) + 1.596f * (v - 128));
+                int g = Math.round(1.164f * (y - 16) - 0.813f * (v - 128) - 0.391f * (u - 128));
+                int b = Math.round(1.164f * (y - 16) + 2.018f * (u - 128));
+
+                r = r < 0 ? 0 : (r > 255 ? 255 : r);
+                g = g < 0 ? 0 : (g > 255 ? 255 : g);
+                b = b < 0 ? 0 : (b > 255 ? 255 : b);
+
+                rgba[i * width + j] = 0xff000000 + (b << 16) + (g << 8) + r;
+            }
+
+        Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        bmp.setPixels(rgba, 0 , width, 0, 0, width, height);
+        return bmp;
+    }
+
+    ExecutorService WORKER = new ThreadPoolExecutor(1, 1,
+            0L, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<Runnable>(1));
+
+    private int count = 0;
+
+    private void saveBitmap(final byte[] data, final int width, final int hegith) {
+        try {
+            WORKER.execute(new Runnable() {
+                @Override
+                public void run() {
+                    if (count == 3) {
+                        return;
+                    }
+                    Log.d("guo", "save data size " + data.length);
+                    if (data.length == 0) return;
+                    final Bitmap bitmap = rawByteArray2RGBABitmap2(data, width, hegith);
+                    if (bitmap == null) return;
+                    FileOutputStream out = null;
+                    File file = new File(Environment.getExternalStorageDirectory(), System.currentTimeMillis() + ".jpg");
+                    try {
+                        out = new FileOutputStream(file);
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out);
+                    } catch (FileNotFoundException e) {
+                        Log.d("guo", "exception " + e.getMessage());
+                    }
+                    try {
+                        if (out != null) {
+                            out.flush();
+                            out.close();
+                        }
+                    } catch (IOException e) {
+                        Log.d("guo", "exception " + e.getMessage());
+                    }
+                    bitmap.recycle();
+                    count++;
+                }
+            });
+
+        } catch (RejectedExecutionException re) {
+            Log.d("guo", "exception " + re.getMessage());
+        }
+
+    }
+
     public IMediaPlayer createPlayer(int playerType) {
         IMediaPlayer mediaPlayer = null;
 
@@ -1086,8 +1223,17 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "start-on-prepared", 1);
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "probsize", "8192");
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "auto_convert", 0);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp");
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1);
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "analyzeduration", 2000000);
+                    ijkMediaPlayer.setOnFrameCallback(new IjkMediaPlayer.OnFrameCallback() {
+                        @Override
+                        public void onFrame(final byte[] data, int width, int height) {
+                            //Log.d("guo", "data size " + data.length);
+                            //setFrame(data);
+                            Message.obtain(mHandler, FRAME, width, height, data).sendToTarget();
+                        }
+                    });
                 }
 
                 mediaPlayer = ijkMediaPlayer;
@@ -1098,7 +1244,6 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
         if (mSettings.getEnableDetachedSurfaceTextureView()) {
             mediaPlayer = new TextureMediaPlayer(mediaPlayer);
         }
-
 
 
         return mediaPlayer;

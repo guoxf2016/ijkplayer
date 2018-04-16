@@ -78,6 +78,7 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     private static final int MEDIA_ERROR = 100;
     private static final int MEDIA_INFO = 200;
 
+    protected static final int MEDIA_VIDEO_FRAME = 1000;
     protected static final int MEDIA_SET_VIDEO_SAR = 10001;
 
     //----------------------------------------
@@ -168,6 +169,22 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
     private int mVideoSarDen;
 
     private String mDataSource;
+
+    private OnFrameCallback mOnFrameCallback;
+
+    public interface OnFrameCallback {
+        void onFrame(byte[] data, int width, int height);
+    }
+
+    public void setOnFrameCallback(OnFrameCallback callback) {
+        this.mOnFrameCallback = callback;
+    }
+
+    protected final void notifyOnFrame(byte[] data, int width, int height) {
+        if (mOnFrameCallback != null)
+            mOnFrameCallback.onFrame(data, width, height);
+    }
+
 
     /**
      * Default library loader
@@ -1031,6 +1048,12 @@ public final class IjkMediaPlayer extends AbstractMediaPlayer {
                 }
                 player.notifyOnInfo(msg.arg1, msg.arg2);
                 // No real default action so far.
+                return;
+            case MEDIA_VIDEO_FRAME:
+                if (msg.obj != null) {
+                    DebugLog.i(TAG, "Info: MEDIA_VIDEO_FRAME\n");
+                    player.notifyOnFrame((byte[])msg.obj, msg.arg1, msg.arg2);
+                }
                 return;
             case MEDIA_TIMED_TEXT:
                 if (msg.obj == null) {
