@@ -4,7 +4,7 @@
     android:id="@+id/drawer_layout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".activities.VideoActivity">
+    tools:context="com.readsense.media.rtsp.activities.VideoActivity">
 
     <!-- The main content view -->
     <FrameLayout
@@ -12,13 +12,13 @@
         android:layout_height="match_parent"
         android:background="#0099cc">
 
-        <tv.danmaku.ijk.media.example.widget.media.IjkVideoView
+        <com.readsense.media.rtsp.widget.media.IjkVideoView
             android:id="@+id/video_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_gravity="center" />
 
-        <tv.danmaku.ijk.media.example.view.RectanglesView
+        <com.readsense.media.rtsp.view.RectanglesView
             android:id="@+id/rectangle_view"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
