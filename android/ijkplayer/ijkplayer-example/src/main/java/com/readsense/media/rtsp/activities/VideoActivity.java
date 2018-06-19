@@ -44,6 +44,7 @@ import com.readsense.media.rtsp.widget.media.AndroidMediaController;
 import com.readsense.media.rtsp.widget.media.IjkVideoView;
 
 import cn.readsense.body.ReadBody;
+import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 import tv.danmaku.ijk.media.player.misc.ITrackInfo;
 import com.readsense.media.rtsp.R;
@@ -162,6 +163,21 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
             return;
         }
         mVideoView.start();
+        mVideoView.setOnCompletionListener(new IMediaPlayer.OnCompletionListener() {
+            @Override
+            public void onCompletion(IMediaPlayer mp) {
+                Log.d(TAG, "onCompletion");
+                mVideoView.togglePlayer();
+            }
+        });
+        mVideoView.setOnErrorListener(new IMediaPlayer.OnErrorListener() {
+            @Override
+            public boolean onError(IMediaPlayer mp, int what, int extra) {
+                Log.d(TAG, "onError");
+                mVideoView.togglePlayer();
+                return true;
+            }
+        });
         long result = ReadBody.nativeCreateObject(this);
         if (result == 0) {
             Log.d(TAG, "init body track success");

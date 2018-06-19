@@ -64,10 +64,15 @@ import cn.readsense.body.ReadBody;
 import cn.readsense.body.SupportImageFormat;
 import io.reactivex.Flowable;
 import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
 import io.reactivex.schedulers.Schedulers;
+
+import com.readsense.app.cameraupload.CameraUpload;
 import com.readsense.media.rtsp.view.RectanglesView;
+
+import mobile.ReadFace.YMFace;
 import tv.danmaku.ijk.media.exo.IjkExoMediaPlayer;
 import tv.danmaku.ijk.media.player.AndroidMediaPlayer;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
@@ -78,6 +83,7 @@ import tv.danmaku.ijk.media.player.misc.IMediaDataSource;
 import tv.danmaku.ijk.media.player.misc.IMediaFormat;
 import tv.danmaku.ijk.media.player.misc.ITrackInfo;
 import tv.danmaku.ijk.media.player.misc.IjkMediaFormat;
+
 import com.readsense.media.rtsp.R;
 import com.readsense.media.rtsp.application.Settings;
 import com.readsense.media.rtsp.services.MediaPlayerService;
@@ -1042,6 +1048,8 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     private final FrameHandler mHandler = new FrameHandler(this);
 
+    private final CameraUpload mCameraUpload = new CameraUpload();
+
     private static class FrameHandler extends Handler {
 
         private WeakReference<IjkVideoView> mOuter;
@@ -1058,8 +1066,8 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             if (outer == null) return;
             switch (msg.what) {
                 case FRAME:
-                    Log.d(TAG, "FRAME " + ((byte[])msg.obj).length);
-                    outer.track((byte[])(msg.obj), msg.arg1, msg.arg2);
+                    Log.d(TAG, "FRAME " + ((byte[]) msg.obj).length);
+                    outer.track((byte[]) (msg.obj), msg.arg1, msg.arg2);
                     break;
                 default:
                     throw new UnsupportedOperationException("wrong case");
@@ -1101,7 +1109,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             }
 
         Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        bmp.setPixels(rgba, 0 , width, 0, 0, width, height);
+        bmp.setPixels(rgba, 0, width, 0, 0, width, height);
         return bmp;
     }
 
@@ -1116,7 +1124,23 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             return;
         }
 
-        Flowable.just(new ArrayList<Body>()).map(new Function<List<Body>, List<Body>>() {
+
+        Disposable disposable = Flowable.just(new ArrayList<YMFace>()).map(new Function<List<YMFace>, List<YMFace>>() {
+            @Override
+            public List<YMFace> apply(List<YMFace> list) {
+                List<YMFace> faces = mCameraUpload.startTrack(data, width, height);
+                if (faces == null) faces = new ArrayList<>();
+                mRectanglesView.setScale((float) getWidth() / width, (float) getHeight() / height);
+                return faces;
+            }
+        }).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread()).subscribe(new Consumer<List<YMFace>>() {
+            @Override
+            public void accept(List<YMFace> list) {
+                mRectanglesView.setFace(list);
+            }
+        });
+
+        /*Disposable disposable = Flowable.just(new ArrayList<Body>()).map(new Function<List<Body>, List<Body>>() {
             @Override
             public List<Body> apply(List<Body> list) {
                 ReadBody.nativeDetect(data, SupportImageFormat.NV21,width, height, 0, list);
@@ -1128,7 +1152,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             public void accept(List<Body> list) {
                 mRectanglesView.setBody(list);
             }
-        });
+        });*/
 
     }
 
@@ -1231,7 +1255,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", 1);
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-fps", 30);
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "fps", 30);
-                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "videotoolbox", 1);
+                    //ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "videotoolbox", 1);
                     //ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "r", 29.97);
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 8);
@@ -1253,9 +1277,11 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                             Message.obtain(mHandler, FRAME, width, height, data).sendToTarget();
                         }
                     });
+
                 }
 
                 mediaPlayer = ijkMediaPlayer;
+
             }
             break;
         }

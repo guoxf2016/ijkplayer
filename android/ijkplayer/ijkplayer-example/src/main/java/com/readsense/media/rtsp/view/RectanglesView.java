@@ -18,6 +18,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import cn.readsense.body.Body;
+import mobile.ReadFace.YMFace;
+
 import com.readsense.media.rtsp.R;
 
 
@@ -86,6 +88,30 @@ public class RectanglesView extends View {
         );*/
         for (Body body : bodies) {
             float[] rect = body.getRect();
+            //final int left = getWidth() - (int) (rect[0] * widthScale + rect[2] * widthScale);
+            final int left = (int) (rect[0] * widthScale);
+            final int top = (int) (rect[1] * heightScale);
+            final int right = left + (int) (rect[2] * widthScale);
+            final int bottom = top + (int) (rect[3] * heightScale);
+
+            this.rectangles.add(
+                    new Rect(left, top, right, bottom)
+            );
+        }
+
+        invalidate();
+    }
+
+    public void setFace(@NonNull List<YMFace> faces) {
+        ensureMainThread();
+
+        this.rectangles.clear();
+        this.recogPonit.clear();
+        /*this.rectangles.add(
+                new Rect(100, 100, 200, 200)
+        );*/
+        for (YMFace face : faces) {
+            float[] rect = face.getRect();
             //final int left = getWidth() - (int) (rect[0] * widthScale + rect[2] * widthScale);
             final int left = (int) (rect[0] * widthScale);
             final int top = (int) (rect[1] * heightScale);

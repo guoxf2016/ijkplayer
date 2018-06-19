@@ -18,6 +18,7 @@ buildscript {
 allprojects {
     repositories {
         jcenter()
+        google()
     }
 }
 
@@ -29,6 +30,7 @@ ext {
 
     versionCode = 800800
     versionName = "0.8.8"
+    ext.retrofit_version = '2.4.0'
 }
 
 wrapper {
