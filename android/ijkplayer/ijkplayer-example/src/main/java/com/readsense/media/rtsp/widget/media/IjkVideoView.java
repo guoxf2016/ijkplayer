@@ -34,6 +34,7 @@ import android.support.annotation.NonNull;
 import android.support.v7.app.AlertDialog;
 import android.text.TextUtils;
 import android.util.AttributeSet;
+import android.util.Base64;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -44,6 +45,7 @@ import android.widget.MediaController;
 import android.widget.TableLayout;
 import android.widget.TextView;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -64,10 +66,15 @@ import cn.readsense.body.ReadBody;
 import cn.readsense.body.SupportImageFormat;
 import io.reactivex.Flowable;
 import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
+import io.reactivex.functions.Predicate;
 import io.reactivex.schedulers.Schedulers;
+
+import com.readsense.app.cameraupload.CameraUpload;
 import com.readsense.media.rtsp.view.RectanglesView;
+
 import tv.danmaku.ijk.media.exo.IjkExoMediaPlayer;
 import tv.danmaku.ijk.media.player.AndroidMediaPlayer;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
@@ -78,6 +85,7 @@ import tv.danmaku.ijk.media.player.misc.IMediaDataSource;
 import tv.danmaku.ijk.media.player.misc.IMediaFormat;
 import tv.danmaku.ijk.media.player.misc.ITrackInfo;
 import tv.danmaku.ijk.media.player.misc.IjkMediaFormat;
+
 import com.readsense.media.rtsp.R;
 import com.readsense.media.rtsp.application.Settings;
 import com.readsense.media.rtsp.services.MediaPlayerService;
@@ -1058,8 +1066,8 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             if (outer == null) return;
             switch (msg.what) {
                 case FRAME:
-                    Log.d(TAG, "FRAME " + ((byte[])msg.obj).length);
-                    outer.track((byte[])(msg.obj), msg.arg1, msg.arg2);
+                    Log.d(TAG, "FRAME " + ((byte[]) msg.obj).length);
+                    outer.track((byte[]) (msg.obj), msg.arg1, msg.arg2);
                     break;
                 default:
                     throw new UnsupportedOperationException("wrong case");
@@ -1101,13 +1109,21 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             }
 
         Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        bmp.setPixels(rgba, 0 , width, 0, 0, width, height);
+        bmp.setPixels(rgba, 0, width, 0, 0, width, height);
         return bmp;
     }
 
     ExecutorService WORKER = new ThreadPoolExecutor(1, 1,
             0L, TimeUnit.MILLISECONDS,
             new ArrayBlockingQueue<Runnable>(1));
+
+    private volatile int mBodyCount = 0;
+
+    private int sendCount = 0;
+
+    private CameraUpload mCameraUpload = new CameraUpload();
+
+    private volatile boolean myFlag = false;
 
     private void track(final byte[] data, final int width, final int height) {
         //Log.d(TAG, "body " + bodies.toString());
@@ -1116,17 +1132,60 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             return;
         }
 
-        Flowable.just(new ArrayList<Body>()).map(new Function<List<Body>, List<Body>>() {
+        Disposable disposable = Flowable.just(new ArrayList<Body>()).map(new Function<List<Body>, List<Body>>() {
             @Override
             public List<Body> apply(List<Body> list) {
-                ReadBody.nativeDetect(data, SupportImageFormat.NV21,width, height, 0, list);
-                mRectanglesView.setScale((float)getWidth() / width, (float) getHeight() / height);
+                ReadBody.nativeDetect(data, SupportImageFormat.NV21, width, height, 0, list);
+                mRectanglesView.setScale((float) getWidth() / width, (float) getHeight() / height);
                 return list;
             }
-        }).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread()).subscribe(new Consumer<List<Body>>() {
+        }).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread()).map(new Function<List<Body>, List<Body>>() {
             @Override
-            public void accept(List<Body> list) {
-                mRectanglesView.setBody(list);
+            public List<Body> apply(List<Body> bodies) {
+                mRectanglesView.setBody(bodies);
+                return bodies;
+            }
+        }).observeOn(Schedulers.io()).filter(new Predicate<List<Body>>() {
+            @Override
+            public boolean test(List<Body> bodies) throws Exception {
+                if (myFlag) {
+                    return false;
+                }
+                if (bodies.size() != mBodyCount) {
+                    sendCount = 0;
+                    return true;
+                }
+                return sendCount < 3;
+            }
+        }).subscribe(new Consumer<List<Body>>() {
+            @Override
+            public void accept(List<Body> bodies) throws Exception {
+                myFlag = true;
+                if (data.length == 0) {
+                    myFlag = false;
+                    return;
+                }
+                final Bitmap bitmap = rawByteArray2RGBABitmap2(data, width, height);
+                if (bitmap == null) {
+                    myFlag = false;
+                    return;
+                }
+                String largeImage = bitmapToString(bitmap);
+                List<String> smallImages = new ArrayList<>();
+                for (Body body : bodies) {
+                    float[] rect = body.getRect();
+                    Bitmap bitmapCut = Bitmap.createBitmap(bitmap, (int) rect[0], (int) rect[1], (int) rect[2], (int) rect[3]);
+                    smallImages.add(bitmapToString(bitmapCut));
+                    bitmapCut.recycle();
+                }
+                bitmap.recycle();
+                int pnm = bodies.size() - mBodyCount;
+                mBodyCount = bodies.size();
+                boolean result = mCameraUpload.upload(largeImage, smallImages, bodies.size(), pnm);
+                if (result) {
+                    sendCount++;
+                }
+                myFlag = false;
             }
         });
 
@@ -1134,20 +1193,20 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     private int count = 0;
 
-    private void saveBitmap(final byte[] data, final int width, final int hegith) {
+    private void saveBitmap(final byte[] data, final int width, final int height) {
         try {
             WORKER.execute(new Runnable() {
                 @Override
                 public void run() {
-                    if (count == 3) {
+                    /*if (count == 3) {
                         return;
-                    }
+                    }*/
                     Log.d(TAG, "save data size " + data.length);
                     if (data.length == 0) return;
-                    final Bitmap bitmap = rawByteArray2RGBABitmap2(data, width, hegith);
+                    final Bitmap bitmap = rawByteArray2RGBABitmap2(data, width, height);
                     if (bitmap == null) return;
                     FileOutputStream out = null;
-                    File file = new File(Environment.getExternalStorageDirectory(), System.currentTimeMillis() + ".jpg");
+                    File file = new File(getContext().getExternalCacheDir(), System.currentTimeMillis() + ".jpg");
                     try {
                         out = new FileOutputStream(file);
                         bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out);
@@ -1163,7 +1222,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                         Log.d(TAG, "exception " + e.getMessage());
                     }
                     bitmap.recycle();
-                    count++;
+                    //count++;
                 }
             });
 
@@ -1171,6 +1230,45 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             Log.d(TAG, "exception " + re.getMessage());
         }
 
+    }
+
+    private void stringToFile(String base64Str) {
+        byte[] b = Base64.decode(base64Str, Base64.DEFAULT);
+        for(int i=0;i<b.length;++i)
+        {
+            if(b[i]<0)
+            {//调整异常数据
+                b[i]+=256;
+            }
+        }
+        FileOutputStream out = null;
+        File file = new File(getContext().getExternalCacheDir(), System.currentTimeMillis() + ".jpg");
+        try {
+            out = new FileOutputStream(file);
+            out.write(b);
+        } catch (FileNotFoundException e) {
+            Log.d(TAG, "exception " + e.getMessage());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        try {
+            if (out != null) {
+                out.flush();
+                out.close();
+            }
+        } catch (IOException e) {
+            Log.d(TAG, "exception " + e.getMessage());
+        }
+    }
+
+    private String bitmapToString(Bitmap bm) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        bm.compress(Bitmap.CompressFormat.JPEG, 90, baos);
+        byte[] b = baos.toByteArray();
+        Log.d(TAG, "after compress " + b.length);
+        String s = Base64.encodeToString(b, Base64.DEFAULT);
+        //stringToFile(s);
+        return s;
     }
 
     public IMediaPlayer createPlayer(int playerType) {

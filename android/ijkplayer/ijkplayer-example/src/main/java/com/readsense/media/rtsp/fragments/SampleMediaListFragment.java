@@ -69,6 +69,7 @@ public class SampleMediaListFragment extends Fragment {
             }
         });
 
+        mAdapter.addItem("rtmp://live.hkstv.hk.lxdns.com/live/hks", "hk");
         mAdapter.addItem("rtsp://192.168.1.114:554/1/h264major", "rtsp");
         mAdapter.addItem("rtsp://10.1.12.50:554/1/h264major", "rtsp");
         mAdapter.addItem("http://devimages.apple.com.edgekey.net/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8", "bipbop basic master playlist");
