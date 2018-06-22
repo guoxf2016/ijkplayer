@@ -27,6 +27,7 @@ public class CameraUpload {
     }
 
     public boolean upload(String largeImage, List<String> smallImages, int bodyCount, int pnm) {
+        Log.d(TAG, "upload");
         RequestEnvelope requestEnvelop = new RequestEnvelope();
         RequestBody requestBody = new RequestBody();
         RequestModel requestModel = new RequestModel();

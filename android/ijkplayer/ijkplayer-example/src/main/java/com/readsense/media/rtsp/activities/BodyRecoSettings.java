@@ -31,15 +31,15 @@ public class BodyRecoSettings extends AppCompatActivity {
         final SharedPreferences sp = getSharedPreferences("com.readsense.media.rtsp", Context.MODE_PRIVATE);
         final EditText rtspServer = (EditText) findViewById(R.id.rtspServer);
         //rtspServer.setText("rtmp://live.hkstv.hk.lxdns.com/live/hks");
-
+        //rtsp://192.168.1.18:554/1/h264major"
         if (App.DEBUG) {
-            rtspServer.setText("rtmp://live.hkstv.hk.lxdns.com/live/hks");
+            rtspServer.setText("rtsp://192.168.1.18:554/1/h264major");
         }
         final String savedUrl = sp.getString("rtspServer", "");
         Log.d(TAG, "savedUrl " + savedUrl);
-        if (!TextUtils.isEmpty(savedUrl)) {
+        /*if (!TextUtils.isEmpty(savedUrl)) {
             rtspServer.setText(savedUrl);
-        }
+        }*/
         final Button button = (Button) findViewById(R.id.button);
         button.setOnClickListener(new View.OnClickListener() {
             @Override

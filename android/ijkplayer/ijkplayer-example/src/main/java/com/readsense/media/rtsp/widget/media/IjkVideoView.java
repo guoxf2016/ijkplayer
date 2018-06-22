@@ -36,6 +36,7 @@ import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.Base64;
 import android.util.Log;
+import android.util.TimeUtils;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -52,6 +53,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -60,6 +62,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 import cn.readsense.body.Body;
 import cn.readsense.body.ReadBody;
@@ -1067,7 +1070,14 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             switch (msg.what) {
                 case FRAME:
                     Log.d(TAG, "FRAME " + ((byte[]) msg.obj).length);
-                    outer.track((byte[]) (msg.obj), msg.arg1, msg.arg2);
+                    try {
+                        if (outer.mReentrantLock.tryLock(1, TimeUnit.MILLISECONDS)) {
+                            outer.mReentrantLock.unlock();
+                            outer.track((byte[]) (msg.obj), msg.arg1, msg.arg2);
+                        }
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                     break;
                 default:
                     throw new UnsupportedOperationException("wrong case");
@@ -1125,21 +1135,34 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     private volatile boolean myFlag = false;
 
+    private ReentrantLock mReentrantLock = new ReentrantLock(true);
+
     private void track(final byte[] data, final int width, final int height) {
         //Log.d(TAG, "body " + bodies.toString());
-
         if (mRectanglesView == null) {
             return;
         }
 
-        Disposable disposable = Flowable.just(new ArrayList<Body>()).map(new Function<List<Body>, List<Body>>() {
+        Disposable disposable = Flowable.just(new ArrayList<Body>()).filter(new Predicate<ArrayList<Body>>() {
+            @Override
+            public boolean test(ArrayList<Body> bodies) throws Exception {
+                if (mReentrantLock.tryLock(1, TimeUnit.MILLISECONDS)) {
+                    return true;
+                }
+                return false;
+            }
+        }).map(new Function<List<Body>, List<Body>>() {
             @Override
             public List<Body> apply(List<Body> list) {
+                long beforeDetect = System.currentTimeMillis();
                 ReadBody.nativeDetect(data, SupportImageFormat.NV21, width, height, 0, list);
+                long afterDetect = System.currentTimeMillis();
+                Log.d("Test", "detect time " + (afterDetect - beforeDetect));
                 mRectanglesView.setScale((float) getWidth() / width, (float) getHeight() / height);
+                mReentrantLock.unlock();
                 return list;
             }
-        }).subscribeOn(Schedulers.io()).observeOn(AndroidSchedulers.mainThread()).map(new Function<List<Body>, List<Body>>() {
+        }).observeOn(AndroidSchedulers.mainThread()).map(new Function<List<Body>, List<Body>>() {
             @Override
             public List<Body> apply(List<Body> bodies) {
                 mRectanglesView.setBody(bodies);
@@ -1148,7 +1171,11 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
         }).observeOn(Schedulers.io()).filter(new Predicate<List<Body>>() {
             @Override
             public boolean test(List<Body> bodies) throws Exception {
+                Log.d(TAG, "myFlag " + myFlag);
                 if (myFlag) {
+                    return false;
+                }
+                if (bodies.isEmpty()) {
                     return false;
                 }
                 if (bodies.size() != mBodyCount) {
@@ -1174,7 +1201,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 List<String> smallImages = new ArrayList<>();
                 for (Body body : bodies) {
                     float[] rect = body.getRect();
-                    if (rect[2] <=0 || rect[3] <= 0) {
+                    if (rect[2] <= 0 || rect[3] <= 0) {
                         break;
                     }
                     Bitmap bitmapCut = Bitmap.createBitmap(bitmap, (int) rect[0], (int) rect[1], (int) rect[2], (int) rect[3]);
@@ -1191,7 +1218,6 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 myFlag = false;
             }
         });
-
     }
 
     private int count = 0;
@@ -1237,11 +1263,9 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     private void stringToFile(String base64Str) {
         byte[] b = Base64.decode(base64Str, Base64.DEFAULT);
-        for(int i=0;i<b.length;++i)
-        {
-            if(b[i]<0)
-            {//调整异常数据
-                b[i]+=256;
+        for (int i = 0; i < b.length; ++i) {
+            if (b[i] < 0) {//调整异常数据
+                b[i] += 256;
             }
         }
         FileOutputStream out = null;
@@ -1351,7 +1375,15 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                         @Override
                         public void onFrame(final byte[] data, int width, int height) {
                             //Log.d(TAG, "data size " + data.length);
-                            Message.obtain(mHandler, FRAME, width, height, data).sendToTarget();
+                            try {
+                                if (mReentrantLock.tryLock(1, TimeUnit.MILLISECONDS)) {
+                                    mReentrantLock.unlock();
+                                    Message.obtain(mHandler, FRAME, width, height, data).sendToTarget();
+                                }
+                            } catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }
+
                         }
                     });
                 }
