@@ -55,7 +55,7 @@ public class CameraUpload {
     private String getMacAddress() {
         //return "c8:25:e1:83:57:3d";
         if (mac == null) {
-            mac = WifiUtil.getMacAddress(App.sInstance.getApplicationContext());
+            mac = WifiUtil.getMacAddress(App.sInstance.getApplicationContext()).replaceAll(":", "_");
         }
         Log.d(TAG, "mac " + mac);
         return mac;

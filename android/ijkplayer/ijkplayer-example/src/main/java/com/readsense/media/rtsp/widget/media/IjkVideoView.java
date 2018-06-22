@@ -1174,6 +1174,9 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 List<String> smallImages = new ArrayList<>();
                 for (Body body : bodies) {
                     float[] rect = body.getRect();
+                    if (rect[2] <=0 || rect[3] <= 0) {
+                        break;
+                    }
                     Bitmap bitmapCut = Bitmap.createBitmap(bitmap, (int) rect[0], (int) rect[1], (int) rect[2], (int) rect[3]);
                     smallImages.add(bitmapToString(bitmapCut));
                     bitmapCut.recycle();
