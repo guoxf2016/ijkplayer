@@ -1,21 +1,8 @@
 package com.readsense.media;
 
 import android.app.Application;
-import android.support.annotation.NonNull;
-import android.util.Log;
-
-import com.readsense.app.model.RequestBodyTest;
-import com.readsense.app.model.RequestEnvelopeTest;
-import com.readsense.app.model.RequestModelTest;
-import com.readsense.app.model.ResponseEnvelopeTest;
-import com.readsense.app.net.BackendHelperTest;
 
 import java.io.File;
-import java.util.List;
-
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
 
 public class App extends Application {
 

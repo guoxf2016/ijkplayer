@@ -17,10 +17,14 @@
 
 package com.readsense.media.rtsp.activities;
 
+import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.Color;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -39,24 +43,45 @@ import android.view.WindowManager;
 import android.widget.TableLayout;
 import android.widget.TextView;
 
+import com.readsense.app.cameraupload.CameraUpload;
 import com.readsense.media.rtsp.view.RectanglesView;
 import com.readsense.media.rtsp.widget.media.AndroidMediaController;
 import com.readsense.media.rtsp.widget.media.IjkVideoView;
 
 import cn.readsense.body.ReadBody;
+import io.reactivex.Flowable;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
+import io.reactivex.functions.Function;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 import tv.danmaku.ijk.media.player.misc.ITrackInfo;
+
 import com.readsense.media.rtsp.R;
 import com.readsense.media.rtsp.application.Settings;
 import com.readsense.media.rtsp.content.RecentMediaStorage;
 import com.readsense.media.rtsp.fragments.TracksFragment;
 import com.readsense.media.rtsp.widget.media.MeasureHelper;
 
+import org.reactivestreams.Publisher;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+
+import static io.reactivex.schedulers.Schedulers.io;
+import static io.reactivex.schedulers.Schedulers.newThread;
+
 public class VideoActivity extends AppCompatActivity implements TracksFragment.ITrackHolder {
     private static final String TAG = "VideoActivity";
 
     private String mVideoPath;
-    private Uri    mVideoUri;
+    private Uri mVideoUri;
 
     private AndroidMediaController mMediaController;
     private IjkVideoView mVideoView;
@@ -69,6 +94,65 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
     private boolean mBackPressed;
 
     private RectanglesView mRectanglesView;
+
+    private BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (ConnectivityManager.CONNECTIVITY_ACTION.equals(intent.getAction())) {
+                uploadCachedFile(context);
+            }
+        }
+    };
+    ExecutorService WORKER = new ThreadPoolExecutor(1, 1,
+            0L, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<Runnable>(1));
+
+    private void uploadCachedFile(Context context) {
+        ConnectivityManager manager = (ConnectivityManager) context
+                .getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (manager == null) return;
+        NetworkInfo activeNetwork = manager.getActiveNetworkInfo();
+        if (activeNetwork != null) { // connected to the internet
+            if (activeNetwork.isConnected()) {
+                        /*if (activeNetwork.getType() == ConnectivityManager.TYPE_WIFI) {
+
+                        } else if (activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE) {
+
+                        }*/
+                        try {
+                            WORKER.execute(new Runnable() {
+                                @Override
+                                public void run() {
+                                    final CameraUpload cameraUpload = new CameraUpload();
+                                    File file = getExternalCacheDir();
+                                    File[] files = file.listFiles();
+                                    int size = files.length;
+                                    for (int i=0; i < size; i++) {
+                                        File file1 = files[i];
+                                        final String json = cameraUpload.readJsonFromFile(file1);
+                                        boolean result = cameraUpload.upload(json);
+                                        if (result) {
+                                            file1.delete();
+                                        }
+                                    }
+
+                                }
+                            });
+                        } catch (RejectedExecutionException e) {
+                            Log.d(TAG, "is busy");
+                        }
+
+
+            } else {
+                Log.e(TAG, "当前没有网络连接，请确保你已经打开网络 ");
+            }
+
+
+        } else {   // not connected to the internet
+
+        }
+
+    }
 
     public static Intent newIntent(Context context, String videoPath, String videoTitle) {
         Intent intent = new Intent(context, VideoActivity.class);
@@ -85,7 +169,7 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         //requestWindowFeature(Window.FEATURE_NO_TITLE);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,WindowManager.
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.
                 LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.activity_player);
 
@@ -169,6 +253,21 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
             Log.d(TAG, "init body track failed");
         }
 
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        IntentFilter intentFilter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
+        registerReceiver(mReceiver, intentFilter);
+        //when start upload cached file
+        uploadCachedFile(this);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        unregisterReceiver(mReceiver);
     }
 
     @Override

@@ -7,7 +7,7 @@ import android.content.Intent;
 public class Receiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        Intent appli = context.getPackageManager().getLaunchIntentForPackage("com.readsense.app.rtsp");
+        Intent appli = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
         context.startActivity(appli);
     }
 }

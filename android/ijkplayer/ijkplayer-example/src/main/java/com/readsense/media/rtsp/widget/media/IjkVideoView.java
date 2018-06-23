@@ -1214,6 +1214,8 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 boolean result = mCameraUpload.upload(largeImage, smallImages, bodies.size(), pnm);
                 if (result) {
                     sendCount++;
+                } else {
+
                 }
                 myFlag = false;
             }

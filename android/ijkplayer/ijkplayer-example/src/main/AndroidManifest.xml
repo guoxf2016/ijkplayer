@@ -33,19 +33,19 @@
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:label="@string/app_name"
             android:screenOrientation="user"
-            android:theme="@style/AppTheme"></activity>
+            android:theme="@style/AppTheme" />
         <activity
             android:name=".activities.SampleMediaActivity"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:label="@string/app_name"
             android:screenOrientation="user"
-            android:theme="@style/AppTheme"></activity>
+            android:theme="@style/AppTheme" />
         <activity
             android:name=".activities.RecentMediaActivity"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:label="@string/app_name"
             android:screenOrientation="user"
-            android:theme="@style/AppTheme"></activity>
+            android:theme="@style/AppTheme" />
         <activity
             android:name=".activities.SettingsActivity"
             android:configChanges="orientation|keyboardHidden|screenSize"
@@ -80,7 +80,9 @@
             android:enabled="false"
             android:exported="false"
             android:icon="@mipmap/ic_launcher"
-            android:label="@string/app_name"></service>
+            android:label="@string/app_name" />
+
+        <service android:name="com.readsense.app.service.LocalService" />
 
         <receiver android:name="com.readsense.media.Receiver">
             <intent-filter>
