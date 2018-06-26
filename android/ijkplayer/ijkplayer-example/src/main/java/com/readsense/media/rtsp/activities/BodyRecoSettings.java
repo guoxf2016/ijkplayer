@@ -1,5 +1,6 @@
 package com.readsense.media.rtsp.activities;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -14,9 +15,12 @@ import android.widget.EditText;
 import com.readsense.app.utils.WifiUtil;
 import com.readsense.media.App;
 import com.readsense.media.rtsp.R;
+import com.tbruyelle.rxpermissions2.RxPermissions;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import io.reactivex.functions.Consumer;
 
 public class BodyRecoSettings extends AppCompatActivity {
 
@@ -56,17 +60,25 @@ public class BodyRecoSettings extends AppCompatActivity {
             }
         });
         Log.d(TAG, "mac " + WifiUtil.getMacAddress(App.sInstance.getApplicationContext()));
-        if (App.DEBUG) {
-            button.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    //rtsp://192.168.1.18:554/1/h264major
-                    final String url = rtspServer.getText().toString().trim();
-                    VideoActivity.intentTo(BodyRecoSettings.this, "rtsp://192.168.1.18:554/1/h264major", "rtsp");
-                    //ControlGate.sendCmd(App.ip, 1);
+
+        new RxPermissions(this).request(Manifest.permission.WRITE_EXTERNAL_STORAGE).subscribe(new Consumer<Boolean>() {
+            @Override
+            public void accept(Boolean aBoolean) throws Exception {
+                if (aBoolean && App.DEBUG) {
+                    button.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            //rtsp://192.168.1.18:554/1/h264major
+                            final String url = rtspServer.getText().toString().trim();
+                            VideoActivity.intentTo(BodyRecoSettings.this, url, "rtsp");
+                            //ControlGate.sendCmd(App.ip, 1);
+                        }
+                    }, 2000);
                 }
-            }, 2000);
-        }
+            }
+        });
+
+
 
     }
 

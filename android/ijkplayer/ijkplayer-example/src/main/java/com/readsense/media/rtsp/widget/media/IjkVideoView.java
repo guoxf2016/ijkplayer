@@ -1241,7 +1241,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
         }).observeOn(AndroidSchedulers.mainThread()).map(new Function<List<Body>, List<Body>>() {
             @Override
             public List<Body> apply(List<Body> bodies) {
-                mRectanglesView.setBody(bodies);
+                //mRectanglesView.setBody(bodies);
                 return bodies;
             }
         }).observeOn(Schedulers.io()).filter(new Predicate<List<Body>>() {

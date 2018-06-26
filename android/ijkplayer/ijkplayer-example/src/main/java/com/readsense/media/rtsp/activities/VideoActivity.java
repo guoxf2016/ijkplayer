@@ -247,12 +247,15 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
             return;
         }
         mVideoView.start();
-        long result = ReadBody.nativeCreateObject(this);
+        //long result = ReadBody.nativeCreateObject(this);
+        long result = ReadBody.nativeCreateObjectWithLicense(this,
+                "ffb601a7a83ad2d1279a29d40e2c4247",
+                "8502ed184f17b9b8ff7abf09af63759dba103d69");
         App.isDetectorDestroy = false;
         if (result == 0) {
-            Log.d(TAG, "init body track success");
+            Log.d(TAG, "init body track success " + result);
         } else {
-            Log.d(TAG, "init body track failed");
+            Log.d(TAG, "init body track failed " + result);
         }
 
     }
