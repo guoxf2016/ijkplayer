@@ -38,6 +38,14 @@ public class RectanglesView extends View {
         this.heightScale = heightScale;
     }
 
+    public float getWidthScale() {
+        return widthScale;
+    }
+
+    public float getHeightScale() {
+        return heightScale;
+    }
+
     public RectanglesView(Context context) {
         super(context);
     }

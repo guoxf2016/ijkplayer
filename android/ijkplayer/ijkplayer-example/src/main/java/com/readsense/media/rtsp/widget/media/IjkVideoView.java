@@ -22,6 +22,9 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Rect;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -76,6 +79,7 @@ import io.reactivex.functions.Predicate;
 import io.reactivex.schedulers.Schedulers;
 
 import com.readsense.app.cameraupload.CameraUpload;
+import com.readsense.media.App;
 import com.readsense.media.rtsp.view.RectanglesView;
 
 import tv.danmaku.ijk.media.exo.IjkExoMediaPlayer;
@@ -319,10 +323,15 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
     // REMOVED: mPendingSubtitleTracks
 
     public void stopPlayback() {
+        mHandler.removeMessages(FRAME);
+        if (mDisposable != null && !mDisposable.isDisposed()) {
+            mDisposable.dispose();
+        }
         if (mMediaPlayer != null) {
             mMediaPlayer.stop();
             mMediaPlayer.release();
             mMediaPlayer = null;
+            myDeamonThread.interrupt();
             if (mHudViewHolder != null)
                 mHudViewHolder.setMediaPlayer(null);
             mCurrentState = STATE_IDLE;
@@ -834,6 +843,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
         if (isInPlaybackState()) {
             mMediaPlayer.start();
             mCurrentState = STATE_PLAYING;
+            myDeamonThread.start();
         }
         mTargetState = STATE_PLAYING;
     }
@@ -1047,6 +1057,32 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
         return text;
     }
 
+    private volatile boolean mDeamonFlag = false;
+
+    private class MyDeamonThread extends Thread {
+
+        @Override
+        public void run() {
+            Log.d(TAG, "MyDeamonThread run");
+            while (!Thread.currentThread().isInterrupted()) {
+                mDeamonFlag = true;
+                Log.d(TAG, "mDeamonFlag " + mDeamonFlag);
+                try {
+                    Thread.sleep(30 * 1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                    Thread.currentThread().interrupt();
+                }
+                Log.d(TAG, "mDeamonFlag " + mDeamonFlag);
+                if (mDeamonFlag) {
+                    App.sInstance.restartApp();
+                }
+            }
+        }
+    }
+
+    private MyDeamonThread myDeamonThread = new MyDeamonThread();
+
     private volatile boolean flag = false;
 
     private static final int FRAME = 100;
@@ -1094,6 +1130,33 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     }
 
+    public Bitmap loadBitmapFromViewBySystem(View v) {
+        if (v == null) {
+            return null;
+        }
+        v.setDrawingCacheEnabled(true);
+        v.buildDrawingCache();
+        return v.getDrawingCache();
+    }
+
+    private void drawRectOnBitmap(Bitmap bitmap, List<Body> bodies, float widthScale, float heightScale) {
+        Canvas canvas = new Canvas(bitmap);
+        Paint paint = new Paint();
+        paint.setColor(getResources().getColor(R.color.rectangle));
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(2);
+        for (Body body : bodies) {
+            float[] rect = body.getRect();
+            //final int left = getWidth() - (int) (rect[0] * widthScale + rect[2] * widthScale);
+            final int left = (int) (rect[0] * widthScale);
+            final int top = (int) (rect[1] * heightScale);
+            final int right = left + (int) (rect[2] * widthScale);
+            final int bottom = top + (int) (rect[3] * heightScale);
+
+            canvas.drawRect(new Rect(left, top, right, bottom), paint);
+        }
+    }
+
     public Bitmap rawByteArray2RGBABitmap2(byte[] data, int width, int height) {
         int frameSize = width * height;
         int[] rgba = new int[frameSize];
@@ -1127,6 +1190,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             0L, TimeUnit.MILLISECONDS,
             new ArrayBlockingQueue<Runnable>(1));
 
+
     private volatile int mBodyCount = 0;
 
     private int sendCount = 0;
@@ -1137,15 +1201,24 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     private ReentrantLock mReentrantLock = new ReentrantLock(true);
 
-    private void track(final byte[] data, final int width, final int height) {
+    Disposable mDisposable = null;
+
+    private int mCheckCount = 0;
+    private int mCheckNotCount = 0;
+    private int mFrameCount = 0;
+
+    private void track(final byte[] data1, final int width, final int height) {
         //Log.d(TAG, "body " + bodies.toString());
         if (mRectanglesView == null) {
             return;
         }
-
-        Disposable disposable = Flowable.just(new ArrayList<Body>()).filter(new Predicate<ArrayList<Body>>() {
+        mFrameCount++;
+        final byte[] data = new byte[data1.length];
+        System.arraycopy(data1, 0, data, 0, data1.length);
+        mDisposable = Flowable.just(new ArrayList<Body>()).filter(new Predicate<ArrayList<Body>>() {
             @Override
             public boolean test(ArrayList<Body> bodies) throws Exception {
+                if (myFlag) return false;
                 if (mReentrantLock.tryLock(1, TimeUnit.MILLISECONDS)) {
                     return true;
                 }
@@ -1155,10 +1228,13 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             @Override
             public List<Body> apply(List<Body> list) {
                 long beforeDetect = System.currentTimeMillis();
-                ReadBody.nativeDetect(data, SupportImageFormat.NV21, width, height, 0, list);
-                long afterDetect = System.currentTimeMillis();
-                Log.d("Test", "detect time " + (afterDetect - beforeDetect));
-                mRectanglesView.setScale((float) getWidth() / width, (float) getHeight() / height);
+                if (mCurrentState != STATE_IDLE || App.isDetectorDestroy) {
+                    ReadBody.nativeDetect(data, SupportImageFormat.NV21, width, height, 0, list);
+                    long afterDetect = System.currentTimeMillis();
+                    Log.d("Test", "detect time " + (afterDetect - beforeDetect));
+                    mRectanglesView.setScale((float) getWidth() / width, (float) getHeight() / height);
+                }
+
                 mReentrantLock.unlock();
                 return list;
             }
@@ -1175,14 +1251,28 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 if (myFlag) {
                     return false;
                 }
-                if (bodies.isEmpty()) {
+                /*if (bodies.isEmpty()) {
+                    return false;
+                }*/
+                Log.d(TAG, "bodies size " + bodies.size() + " mBodyCount " + mBodyCount);
+                if (bodies.size() != mBodyCount) {
+                    mCheckCount++;
+                    if (mCheckCount == 3) {
+                        mCheckCount = 0;
+                        mCheckNotCount = 0;
+                        return true;
+                    } else {
+                        return false;
+                    }
+                } else {
+                    mCheckCount = 0;
+                    /*mCheckNotCount++;
+                    if (mCheckNotCount == 3) {
+                        mCheckCount = 0;
+                        mCheckNotCount = 0;
+                    }*/
                     return false;
                 }
-                if (bodies.size() != mBodyCount) {
-                    sendCount = 0;
-                    return true;
-                }
-                return sendCount < 3;
             }
         }).subscribe(new Consumer<List<Body>>() {
             @Override
@@ -1193,10 +1283,12 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     return;
                 }
                 final Bitmap bitmap = rawByteArray2RGBABitmap2(data, width, height);
+                //final Bitmap bitmap = loadBitmapFromViewBySystem(IjkVideoView.this.getRootView());
                 if (bitmap == null) {
                     myFlag = false;
                     return;
                 }
+                drawRectOnBitmap(bitmap, bodies, 1.0f, 1.0f/*mRectanglesView.getWidthScale(), mRectanglesView.getHeightScale()*/);
                 String largeImage = bitmapToString(bitmap);
                 List<String> smallImages = new ArrayList<>();
                 for (Body body : bodies) {
@@ -1212,11 +1304,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 int pnm = bodies.size() - mBodyCount;
                 mBodyCount = bodies.size();
                 boolean result = mCameraUpload.upload(largeImage, smallImages, bodies.size(), pnm);
-                if (result) {
-                    sendCount++;
-                } else {
 
-                }
                 myFlag = false;
             }
         });
@@ -1364,6 +1452,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 8);
                     //ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "overlay-format", IjkMediaPlayer.SDL_FCC_YV12);
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", 0);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "flush_packets", 1L);
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "nobuffer");
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "max-buffer-size", 1024);
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "min-frames", 25);
@@ -1372,11 +1461,12 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "auto_convert", 0);
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "rtsp_transport", "tcp");
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "reconnect", 1);
-                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "analyzeduration", 2000000);
+                    ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "analyzeduration", 100);
                     ijkMediaPlayer.setOnFrameCallback(new IjkMediaPlayer.OnFrameCallback() {
                         @Override
                         public void onFrame(final byte[] data, int width, int height) {
                             //Log.d(TAG, "data size " + data.length);
+                            mDeamonFlag = false;
                             try {
                                 if (mReentrantLock.tryLock(1, TimeUnit.MILLISECONDS)) {
                                     mReentrantLock.unlock();

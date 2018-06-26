@@ -56,7 +56,7 @@ public class CameraUpload {
         }
         if (responseEnvelope != null) {
             String result = responseEnvelope.body.pushDataByJsonResponse.result;
-            Log.d(TAG, "onResponse " + result);
+            Log.d(TAG, "onResponse " + result + " count " + bodyCount);
             return "true".equals(result);
         }
         saveJsonToFile(requestModel.json, time);

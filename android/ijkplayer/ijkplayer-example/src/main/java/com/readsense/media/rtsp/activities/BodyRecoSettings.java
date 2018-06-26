@@ -62,7 +62,7 @@ public class BodyRecoSettings extends AppCompatActivity {
                 public void run() {
                     //rtsp://192.168.1.18:554/1/h264major
                     final String url = rtspServer.getText().toString().trim();
-                    VideoActivity.intentTo(BodyRecoSettings.this, url, "rtsp");
+                    VideoActivity.intentTo(BodyRecoSettings.this, "rtsp://192.168.1.18:554/1/h264major", "rtsp");
                     //ControlGate.sendCmd(App.ip, 1);
                 }
             }, 2000);

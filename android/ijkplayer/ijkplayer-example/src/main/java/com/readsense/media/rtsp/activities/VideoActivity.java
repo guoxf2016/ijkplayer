@@ -44,6 +44,7 @@ import android.widget.TableLayout;
 import android.widget.TextView;
 
 import com.readsense.app.cameraupload.CameraUpload;
+import com.readsense.media.App;
 import com.readsense.media.rtsp.view.RectanglesView;
 import com.readsense.media.rtsp.widget.media.AndroidMediaController;
 import com.readsense.media.rtsp.widget.media.IjkVideoView;
@@ -247,6 +248,7 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
         }
         mVideoView.start();
         long result = ReadBody.nativeCreateObject(this);
+        App.isDetectorDestroy = false;
         if (result == 0) {
             Log.d(TAG, "init body track success");
         } else {
@@ -294,6 +296,7 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        App.isDetectorDestroy = true;
         ReadBody.nativeDestroyObject();
     }
 

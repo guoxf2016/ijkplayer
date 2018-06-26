@@ -1,12 +1,17 @@
 package com.readsense.media;
 
 import android.app.Application;
+import android.content.Intent;
+import android.text.format.DateFormat;
+
+import com.readsense.media.rtsp.activities.BodyRecoSettings;
 
 import java.io.File;
+import java.io.IOException;
 
-public class App extends Application {
+public class App extends Application implements Thread.UncaughtExceptionHandler{
 
-    public static Application sInstance = null;
+    public static App sInstance = null;
 
     public static long timestamp = System.currentTimeMillis();
 
@@ -14,6 +19,8 @@ public class App extends Application {
 
     public static String url = null;
     public static String ip = null;
+
+    public static volatile boolean isDetectorDestroy = false;
 
     @Override
     public void onCreate() {
@@ -23,5 +30,28 @@ public class App extends Application {
         if (file != null && !file.exists()) {
             file.mkdirs();
         }
+        Thread.setDefaultUncaughtExceptionHandler(this);
+    }
+
+    @Override
+    public void uncaughtException(Thread t, Throwable e) {
+
+        File logFile = new File(this.getExternalCacheDir(),
+                DateFormat.format("yyyy-MM-dd-HH-mm-ss", System.currentTimeMillis()) + ".log");
+        try {
+            Runtime.getRuntime().exec("logcat -f " + logFile.getAbsolutePath());
+            System.exit(1);
+        } catch (IOException e1) {
+            e1.printStackTrace();
+        }
+
+        restartApp();
+    }
+
+    public void restartApp() {
+        Intent intent = new Intent(this, BodyRecoSettings.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        this.startActivity(intent);
+        android.os.Process.killProcess(android.os.Process.myPid());
     }
 }
