@@ -1075,6 +1075,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 }
                 Log.d(TAG, "mDeamonFlag " + mDeamonFlag);
                 if (mDeamonFlag) {
+                    App.sInstance.logOut("rtsp_error");
                     App.sInstance.restartApp();
                 }
             }

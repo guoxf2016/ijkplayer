@@ -36,16 +36,19 @@ public class App extends Application implements Thread.UncaughtExceptionHandler{
     @Override
     public void uncaughtException(Thread t, Throwable e) {
 
+        logOut("");
+        restartApp();
+    }
+
+    public void logOut(String tag) {
         File logFile = new File(this.getExternalCacheDir(),
-                DateFormat.format("yyyy-MM-dd-HH-mm-ss", System.currentTimeMillis()) + ".log");
+                DateFormat.format("yyyy-MM-dd-HH-mm-ss", System.currentTimeMillis()) + tag + ".log");
         try {
             Runtime.getRuntime().exec("logcat -f " + logFile.getAbsolutePath());
-            System.exit(1);
+            //System.exit(1);
         } catch (IOException e1) {
             e1.printStackTrace();
         }
-
-        restartApp();
     }
 
     public void restartApp() {
