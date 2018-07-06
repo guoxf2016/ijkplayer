@@ -44,10 +44,12 @@ public class App extends Application implements Thread.UncaughtExceptionHandler{
         File logFile = new File(this.getExternalCacheDir(),
                 DateFormat.format("yyyy-MM-dd-HH-mm-ss", System.currentTimeMillis()) + tag + ".log");
         try {
-            Runtime.getRuntime().exec("logcat -f " + logFile.getAbsolutePath());
-            //System.exit(1);
+            Process process = Runtime.getRuntime().exec("logcat -d -f " + logFile.getAbsolutePath());
+            process.waitFor();
         } catch (IOException e1) {
             e1.printStackTrace();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
     }
 
@@ -56,5 +58,6 @@ public class App extends Application implements Thread.UncaughtExceptionHandler{
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         this.startActivity(intent);
         android.os.Process.killProcess(android.os.Process.myPid());
+        //System.exit(0);
     }
 }
