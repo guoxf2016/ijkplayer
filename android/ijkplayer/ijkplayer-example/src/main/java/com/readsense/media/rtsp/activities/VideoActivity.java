@@ -300,7 +300,9 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
     protected void onDestroy() {
         super.onDestroy();
         App.isDetectorDestroy = true;
-        ReadBody.nativeDestroyObject();
+        synchronized (App.LOCK) {
+            ReadBody.nativeDestroyObject();
+        }
     }
 
     @Override

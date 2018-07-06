@@ -35,9 +35,9 @@ public class BodyRecoSettings extends AppCompatActivity {
         final EditText rtspServer = (EditText) findViewById(R.id.rtspServer);
         //rtspServer.setText("rtmp://live.hkstv.hk.lxdns.com/live/hks");
         //rtsp://192.168.1.18:554/1/h264major"
-        /*if (App.DEBUG) {
-            rtspServer.setText("rtsp://192.168.1.18:554/1/h264major");
-        }*/
+        if (App.DEBUG) {
+            rtspServer.setText("rtmp://live.hkstv.hk.lxdns.com/live/hks");
+        }
         final String savedUrl = sp.getString("rtspServer", "");
         Log.d(TAG, "savedUrl " + savedUrl);
         if (!TextUtils.isEmpty(savedUrl)) {

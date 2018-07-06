@@ -22,6 +22,8 @@ public class App extends Application implements Thread.UncaughtExceptionHandler{
 
     public static volatile boolean isDetectorDestroy = false;
 
+    public static final Object LOCK = new Object();
+
     @Override
     public void onCreate() {
         super.onCreate();

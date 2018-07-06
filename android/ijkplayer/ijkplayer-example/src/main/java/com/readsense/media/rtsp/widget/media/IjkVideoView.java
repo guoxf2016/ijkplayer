@@ -1107,14 +1107,15 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             switch (msg.what) {
                 case FRAME:
                     Log.d(TAG, "FRAME " + ((byte[]) msg.obj).length);
-                    try {
+                    outer.track((byte[]) (msg.obj), msg.arg1, msg.arg2);
+                    /*try {
                         if (outer.mReentrantLock.tryLock(1, TimeUnit.MILLISECONDS)) {
                             outer.mReentrantLock.unlock();
-                            outer.track((byte[]) (msg.obj), msg.arg1, msg.arg2);
+
                         }
                     } catch (InterruptedException e) {
                         e.printStackTrace();
-                    }
+                    }*/
                     break;
                 default:
                     throw new UnsupportedOperationException("wrong case");
@@ -1229,20 +1230,23 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             @Override
             public List<Body> apply(List<Body> list) {
                 long beforeDetect = System.currentTimeMillis();
-                if (mCurrentState != STATE_IDLE || App.isDetectorDestroy) {
-                    ReadBody.nativeDetect(data, SupportImageFormat.NV21, width, height, 0, list);
+                if (mCurrentState != STATE_IDLE || !App.isDetectorDestroy) {
+                    synchronized (App.LOCK) {
+                        if (mCurrentState != STATE_IDLE || !App.isDetectorDestroy){
+                            ReadBody.nativeDetect(data, SupportImageFormat.NV21, width, height, 0, list);
+                        }
+                    }
                     long afterDetect = System.currentTimeMillis();
                     Log.d("Test", "detect time " + (afterDetect - beforeDetect));
                     mRectanglesView.setScale((float) getWidth() / width, (float) getHeight() / height);
                 }
-
                 mReentrantLock.unlock();
                 return list;
             }
         }).observeOn(AndroidSchedulers.mainThread()).map(new Function<List<Body>, List<Body>>() {
             @Override
             public List<Body> apply(List<Body> bodies) {
-                //mRectanglesView.setBody(bodies);
+                mRectanglesView.setBody(bodies);
                 return bodies;
             }
         }).observeOn(Schedulers.io()).filter(new Predicate<List<Body>>() {
@@ -1304,7 +1308,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 bitmap.recycle();
                 int pnm = bodies.size() - mBodyCount;
                 mBodyCount = bodies.size();
-                boolean result = mCameraUpload.upload(largeImage, smallImages, bodies.size(), pnm);
+                //boolean result = mCameraUpload.upload(largeImage, smallImages, bodies.size(), pnm);
 
                 myFlag = false;
             }
