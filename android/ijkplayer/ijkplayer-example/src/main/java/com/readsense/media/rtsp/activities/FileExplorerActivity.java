@@ -24,21 +24,20 @@ import android.support.v4.app.FragmentTransaction;
 import android.text.TextUtils;
 import android.util.Log;
 
-import com.readsense.app.model.RequestBody;
-import com.readsense.app.model.RequestBodyTest;
-import com.readsense.app.model.RequestEnvelope;
-import com.readsense.app.model.RequestEnvelopeTest;
-import com.readsense.app.model.RequestModel;
-import com.readsense.app.model.RequestModelTest;
-import com.readsense.app.model.ResponseEnvelope;
-import com.readsense.app.model.ResponseEnvelopeTest;
+import com.readsense.app.model.pushdatabyjson.RequestBody;
+import com.readsense.app.model.gettest.RequestBodyTest;
+import com.readsense.app.model.pushdatabyjson.RequestEnvelope;
+import com.readsense.app.model.gettest.RequestEnvelopeTest;
+import com.readsense.app.model.pushdatabyjson.RequestModel;
+import com.readsense.app.model.gettest.RequestModelTest;
+import com.readsense.app.model.pushdatabyjson.ResponseEnvelope;
+import com.readsense.app.model.gettest.ResponseEnvelopeTest;
 import com.readsense.app.net.BackendHelper;
 import com.readsense.app.net.BackendHelperTest;
 import com.squareup.otto.Subscribe;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
 
 import com.readsense.media.rtsp.R;
 import com.readsense.media.rtsp.application.AppActivity;

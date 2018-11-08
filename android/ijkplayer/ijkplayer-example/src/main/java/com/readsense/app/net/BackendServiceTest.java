@@ -1,7 +1,7 @@
 package com.readsense.app.net;
 
-import com.readsense.app.model.RequestEnvelopeTest;
-import com.readsense.app.model.ResponseEnvelopeTest;
+import com.readsense.app.model.gettest.RequestEnvelopeTest;
+import com.readsense.app.model.gettest.ResponseEnvelopeTest;
 
 import retrofit2.Call;
 import retrofit2.http.Body;

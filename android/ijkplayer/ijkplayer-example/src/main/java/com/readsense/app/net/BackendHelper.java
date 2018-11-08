@@ -62,10 +62,10 @@ public class BackendHelper {
                 return chain.proceed(request);
             }
         });
-        okHttpClient.addInterceptor(interceptor);
-        OkHttpClient client = okHttpClient.connectTimeout(2, TimeUnit.MINUTES)
-                .writeTimeout(2, TimeUnit.MINUTES)
-                .readTimeout(2, TimeUnit.MINUTES)
+        //okHttpClient.addInterceptor(interceptor);
+        OkHttpClient client = okHttpClient.connectTimeout(5, TimeUnit.SECONDS)
+                .writeTimeout(5, TimeUnit.SECONDS)
+                .readTimeout(5, TimeUnit.SECONDS)
                 .build();
         Retrofit retrofit = retrofitBuilder.client(client).build();
         return retrofit.create(serviceClass);

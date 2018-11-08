@@ -10,6 +10,16 @@ public class Body {
 
     private int isTrack;
 
+    public int getStatuscode() {
+        return statuscode;
+    }
+
+    public void setStatuscode(int statuscode) {
+        this.statuscode = statuscode;
+    }
+
+    private int statuscode;
+
     public float[] getRect() {
         return rect;
     }

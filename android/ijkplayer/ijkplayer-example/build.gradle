@@ -41,6 +41,11 @@ android {
             universalApk false
         }
     }
+   /* externalNativeBuild {
+        cmake {
+            path 'CMakeLists.txt'
+        }
+    }*/
 }
 
 dependencies {

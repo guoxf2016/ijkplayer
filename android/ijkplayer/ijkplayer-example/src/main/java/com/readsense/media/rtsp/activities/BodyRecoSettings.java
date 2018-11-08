@@ -20,6 +20,7 @@ import com.tbruyelle.rxpermissions2.RxPermissions;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 
 public class BodyRecoSettings extends AppCompatActivity {
@@ -35,9 +36,9 @@ public class BodyRecoSettings extends AppCompatActivity {
         final EditText rtspServer = (EditText) findViewById(R.id.rtspServer);
         //rtspServer.setText("rtmp://live.hkstv.hk.lxdns.com/live/hks");
         //rtsp://192.168.1.18:554/1/h264major"
-        if (App.DEBUG) {
-            rtspServer.setText("rtmp://live.hkstv.hk.lxdns.com/live/hks");
-        }
+        /*if (App.DEBUG) {
+            rtspServer.setText("rtsp://192.168.1.18:554/0/h264major");
+        }*/
         final String savedUrl = sp.getString("rtspServer", "");
         Log.d(TAG, "savedUrl " + savedUrl);
         if (!TextUtils.isEmpty(savedUrl)) {
@@ -56,24 +57,30 @@ public class BodyRecoSettings extends AppCompatActivity {
                     sp.edit().putString("rtspServer", url).apply();
                 }
 
-                VideoActivity.intentTo(BodyRecoSettings.this, url, "rtsp");
+                if (!TextUtils.isEmpty(url)) {
+                    VideoActivity.intentTo(BodyRecoSettings.this, url, "rtsp");
+                }
+
             }
         });
-        Log.d(TAG, "mac " + WifiUtil.getMacAddress(App.sInstance.getApplicationContext()));
+        //Log.d(TAG, "mac " + WifiUtil.getMacAddress(App.sInstance.getApplicationContext()));
 
-        new RxPermissions(this).request(Manifest.permission.WRITE_EXTERNAL_STORAGE).subscribe(new Consumer<Boolean>() {
+        Disposable disposable = new RxPermissions(this).request(Manifest.permission.WRITE_EXTERNAL_STORAGE).subscribe(new Consumer<Boolean>() {
             @Override
             public void accept(Boolean aBoolean) throws Exception {
                 if (aBoolean && App.DEBUG) {
-                    button.postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            //rtsp://192.168.1.18:554/1/h264major
-                            final String url = rtspServer.getText().toString().trim();
-                            VideoActivity.intentTo(BodyRecoSettings.this, url, "rtsp");
-                            //ControlGate.sendCmd(App.ip, 1);
-                        }
-                    }, 2000);
+                    final String url = rtspServer.getText().toString().trim();
+                    //final String url = "rtmp://live.hkstv.hk.lxdns.com/live/hks";
+                    if (!TextUtils.isEmpty(url)) {
+                        button.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                //rtsp://192.168.1.18:554/1/h264major
+                                VideoActivity.intentTo(BodyRecoSettings.this, url, "rtsp");
+                                //ControlGate.sendCmd(App.ip, 1);
+                            }
+                        }, 1000 * 2);
+                    }
                 }
             }
         });

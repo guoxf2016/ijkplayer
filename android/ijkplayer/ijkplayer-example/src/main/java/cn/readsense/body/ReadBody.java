@@ -11,11 +11,12 @@ import java.util.List;
 public class ReadBody {
     static {
         System.loadLibrary("readbody");
+        System.loadLibrary("bodysense");
     }
 
     public static native long nativeCreateObject(Context context);
 
-    public static native long nativeCreateObjectWithLicense(Context context,String appid,String appsecret);
+    public static native long nativeCreateObjectWithLicense(Context context, String appid, String appsecret);
 
     public static native void nativeDestroyObject();
 
@@ -42,4 +43,13 @@ public class ReadBody {
     public static native String nativeSDKVersion();
 
     public static native void nativeReset();
+
+
+    public static native long nativeBodySenseInit(Context context);
+
+    public static native void nativeBodySenseUnInit();
+
+    public static native long nativeBodySenseTrack(byte[] yuv, int iw, int ih, int ori, List<Body> bodys);
+
+
 }

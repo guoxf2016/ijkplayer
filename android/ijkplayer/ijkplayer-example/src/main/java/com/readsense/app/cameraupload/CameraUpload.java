@@ -4,10 +4,10 @@ import android.util.Log;
 
 import com.google.gson.Gson;
 import com.readsense.app.model.DetectCondition;
-import com.readsense.app.model.RequestBody;
-import com.readsense.app.model.RequestEnvelope;
-import com.readsense.app.model.RequestModel;
-import com.readsense.app.model.ResponseEnvelope;
+import com.readsense.app.model.pushdatabyjson.RequestBody;
+import com.readsense.app.model.pushdatabyjson.RequestEnvelope;
+import com.readsense.app.model.pushdatabyjson.RequestModel;
+import com.readsense.app.model.pushdatabyjson.ResponseEnvelope;
 import com.readsense.app.net.BackendHelper;
 import com.readsense.app.utils.WifiUtil;
 import com.readsense.media.App;
@@ -19,8 +19,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.Calendar;
 import java.util.List;
 
@@ -45,21 +43,29 @@ public class CameraUpload {
         requestModel.pushDataByJson = "http://tempuri.org/";
         requestBody.pushDataByJson = requestModel;
         requestEnvelop.body = requestBody;
-        Call<ResponseEnvelope> call = BackendHelper.getService().upload(requestEnvelop);
-        ResponseEnvelope responseEnvelope = null;
-        try {
-            responseEnvelope = call.execute().body();
-        } catch (IOException e) {
-            e.printStackTrace();
-            saveJsonToFile(requestModel.json, time);
-            return false;
-        }
-        if (responseEnvelope != null) {
-            String result = responseEnvelope.body.pushDataByJsonResponse.result;
-            Log.d(TAG, "onResponse " + result + " count " + bodyCount);
-            return "true".equals(result);
+        if (App.isNetworkAvailable) {
+            Call<ResponseEnvelope> call = BackendHelper.getService().upload(requestEnvelop);
+            ResponseEnvelope responseEnvelope = null;
+            try {
+                responseEnvelope = call.execute().body();
+            } catch (IOException e) {
+                Log.d(TAG, "exception " + e.getMessage());
+                saveJsonToFile(requestModel.json, time);
+                return false;
+            }
+            if (responseEnvelope != null) {
+                String result = responseEnvelope.body.pushDataByJsonResponse.result;
+                Log.d(TAG, "onResponse " + result + " count " + bodyCount);
+                return "true".equals(result);
+            }
+
         }
         saveJsonToFile(requestModel.json, time);
+        /*try {
+            Thread.sleep(2 * 1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }*/
         return false;
     }
 

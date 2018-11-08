@@ -1,7 +1,8 @@
 package com.readsense.app.net;
 
-import com.readsense.app.model.RequestEnvelope;
-import com.readsense.app.model.ResponseEnvelope;
+import com.readsense.app.model.pushdatabyjson.RequestEnvelope;
+import com.readsense.app.model.pushdatabyjson.ResponseEnvelope;
+
 
 import retrofit2.Call;
 import retrofit2.http.Body;
@@ -16,5 +17,12 @@ public interface BackendService {
     })
     @POST("CameraDetect/DetectData.asmx")
     Call<ResponseEnvelope> upload(@Body RequestEnvelope body);
+
+    @Headers({
+            "Content-Type: text/xml; charset=utf-8",
+            "SOAPAction: http://tempuri.org/Heartbeat"
+    })
+    @POST("CameraDetect/DetectData.asmx")
+    Call<com.readsense.app.model.heartbeat.ResponseEnvelope> heartBeat(@Body com.readsense.app.model.heartbeat.RequestEnvelope body);
 
 }

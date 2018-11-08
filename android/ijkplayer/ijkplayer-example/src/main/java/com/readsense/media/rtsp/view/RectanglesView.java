@@ -17,8 +17,9 @@ import android.view.View;
 import java.util.ArrayList;
 import java.util.List;
 
-import cn.readsense.body.Body;
 import com.readsense.media.rtsp.R;
+
+import cn.readsense.body.Body;
 
 
 /**
@@ -93,6 +94,9 @@ public class RectanglesView extends View {
                 new Rect(100, 100, 200, 200)
         );*/
         for (Body body : bodies) {
+            if (body == null) {
+                continue;
+            }
             float[] rect = body.getRect();
             //final int left = getWidth() - (int) (rect[0] * widthScale + rect[2] * widthScale);
             final int left = (int) (rect[0] * widthScale);

@@ -29,17 +29,16 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.os.WorkSource;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AlertDialog;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.Base64;
 import android.util.Log;
-import android.util.TimeUtils;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -56,7 +55,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -573,6 +571,8 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             new IMediaPlayer.OnErrorListener() {
                 public boolean onError(IMediaPlayer mp, int framework_err, int impl_err) {
                     Log.d(TAG, "Error: " + framework_err + "," + impl_err);
+                    App.sInstance.logOut("rtsp_framework_err");
+                    App.sInstance.restartApp(60 * 1000);
                     mCurrentState = STATE_ERROR;
                     mTargetState = STATE_ERROR;
                     if (mMediaController != null) {
@@ -840,10 +840,10 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
 
     @Override
     public void start() {
+        myDeamonThread.start();
         if (isInPlaybackState()) {
             mMediaPlayer.start();
             mCurrentState = STATE_PLAYING;
-            myDeamonThread.start();
         }
         mTargetState = STATE_PLAYING;
     }
@@ -1066,17 +1066,18 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
             Log.d(TAG, "MyDeamonThread run");
             while (!Thread.currentThread().isInterrupted()) {
                 mDeamonFlag = true;
-                Log.d(TAG, "mDeamonFlag " + mDeamonFlag);
+                Log.d(TAG, "mDeamonFlag1 " + mDeamonFlag);
                 try {
                     Thread.sleep(30 * 1000);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
-                    Thread.currentThread().interrupt();
+                    //Thread.currentThread().interrupt();
+                    mDeamonFlag = false;
                 }
-                Log.d(TAG, "mDeamonFlag " + mDeamonFlag);
+                Log.d(TAG, "mDeamonFlag2 " + mDeamonFlag);
                 if (mDeamonFlag) {
                     App.sInstance.logOut("rtsp_error");
-                    App.sInstance.restartApp();
+                    App.sInstance.restartApp(1000);
                 }
             }
         }
@@ -1209,8 +1210,10 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
     private int mCheckNotCount = 0;
     private int mFrameCount = 0;
 
+    private boolean isMoved = false;
+
     private void track(final byte[] data1, final int width, final int height) {
-        //Log.d(TAG, "body " + bodies.toString());
+        Log.d(TAG, "track");
         if (mRectanglesView == null) {
             return;
         }
@@ -1229,11 +1232,21 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
         }).map(new Function<List<Body>, List<Body>>() {
             @Override
             public List<Body> apply(List<Body> list) {
+                Log.d(TAG, "mBodyCount size " + mBodyCount);
                 long beforeDetect = System.currentTimeMillis();
                 if (mCurrentState != STATE_IDLE || !App.isDetectorDestroy) {
                     synchronized (App.LOCK) {
                         if (mCurrentState != STATE_IDLE || !App.isDetectorDestroy){
-                            ReadBody.nativeDetect(data, SupportImageFormat.NV21, width, height, 0, list);
+                            List<Body> result = new ArrayList<>();
+                            long code_sense = ReadBody.nativeBodySenseTrack(data, width, height, 0, result);
+                            Log.d(TAG, "sense size " + result.size());
+                            if (!result.isEmpty()) {
+                                isMoved = true;
+                                long res = ReadBody.nativeDetect(data, SupportImageFormat.NV21, width, height, 0, list);
+                                Log.d(TAG, "nativeDetect list size " + list.size());
+                            } else {
+                                isMoved = false;
+                            }
                         }
                     }
                     long afterDetect = System.currentTimeMillis();
@@ -1241,6 +1254,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     mRectanglesView.setScale((float) getWidth() / width, (float) getHeight() / height);
                 }
                 mReentrantLock.unlock();
+                Log.d(TAG, "isMoved" + isMoved);
                 return list;
             }
         }).observeOn(AndroidSchedulers.mainThread()).map(new Function<List<Body>, List<Body>>() {
@@ -1249,7 +1263,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 mRectanglesView.setBody(bodies);
                 return bodies;
             }
-        }).observeOn(Schedulers.io()).filter(new Predicate<List<Body>>() {
+        }).observeOn(Schedulers.newThread()).filter(new Predicate<List<Body>>() {
             @Override
             public boolean test(List<Body> bodies) throws Exception {
                 Log.d(TAG, "myFlag " + myFlag);
@@ -1259,10 +1273,14 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 /*if (bodies.isEmpty()) {
                     return false;
                 }*/
-                Log.d(TAG, "bodies size " + bodies.size() + " mBodyCount " + mBodyCount);
+                //Log.d(TAG, "bodies size " + bodies.size() + " mBodyCount " + mBodyCount);
+                if (!isMoved) {
+                    return false;
+                }
                 if (bodies.size() != mBodyCount) {
+                    //return true;
                     mCheckCount++;
-                    if (mCheckCount == 3) {
+                    if (mCheckCount == 2) {
                         mCheckCount = 0;
                         mCheckNotCount = 0;
                         return true;
@@ -1279,7 +1297,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     return false;
                 }
             }
-        }).subscribe(new Consumer<List<Body>>() {
+        }).subscribeOn(Schedulers.io()).subscribe(new Consumer<List<Body>>() {
             @Override
             public void accept(List<Body> bodies) throws Exception {
                 myFlag = true;
@@ -1297,6 +1315,9 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 String largeImage = bitmapToString(bitmap);
                 List<String> smallImages = new ArrayList<>();
                 for (Body body : bodies) {
+                    if (body == null) {
+                        continue;
+                    }
                     float[] rect = body.getRect();
                     if (rect[2] <= 0 || rect[3] <= 0) {
                         break;
@@ -1308,7 +1329,7 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                 bitmap.recycle();
                 int pnm = bodies.size() - mBodyCount;
                 mBodyCount = bodies.size();
-                //boolean result = mCameraUpload.upload(largeImage, smallImages, bodies.size(), pnm);
+                boolean result = mCameraUpload.upload(largeImage, smallImages, bodies.size(), pnm);
 
                 myFlag = false;
             }
@@ -1469,8 +1490,8 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                     ijkMediaPlayer.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "analyzeduration", 100);
                     ijkMediaPlayer.setOnFrameCallback(new IjkMediaPlayer.OnFrameCallback() {
                         @Override
-                        public void onFrame(final byte[] data, int width, int height) {
-                            //Log.d(TAG, "data size " + data.length);
+                        public void onFrame(final byte[] data, final int width, final int height) {
+                            Log.d(TAG, "data size " + data.length);
                             mDeamonFlag = false;
                             try {
                                 if (mReentrantLock.tryLock(1, TimeUnit.MILLISECONDS)) {
@@ -1480,6 +1501,12 @@ public class IjkVideoView extends FrameLayout implements MediaController.MediaPl
                             } catch (InterruptedException e) {
                                 e.printStackTrace();
                             }
+                           /* WORKER.execute(new Runnable() {
+                                @Override
+                                public void run() {
+                                    track(data, width, height);
+                                }
+                            });*/
 
                         }
                     });

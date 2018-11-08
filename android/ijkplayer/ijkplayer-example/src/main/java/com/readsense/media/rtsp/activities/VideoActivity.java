@@ -28,6 +28,8 @@ import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentTransaction;
 import android.support.v4.widget.DrawerLayout;
@@ -44,6 +46,13 @@ import android.widget.TableLayout;
 import android.widget.TextView;
 
 import com.readsense.app.cameraupload.CameraUpload;
+
+import com.readsense.app.model.heartbeat.RequestBody;
+import com.readsense.app.model.heartbeat.RequestEnvelope;
+import com.readsense.app.model.heartbeat.RequestModel;
+import com.readsense.app.model.heartbeat.ResponseEnvelope;
+import com.readsense.app.net.BackendHelper;
+import com.readsense.app.utils.WifiUtil;
 import com.readsense.media.App;
 import com.readsense.media.rtsp.view.RectanglesView;
 import com.readsense.media.rtsp.widget.media.AndroidMediaController;
@@ -52,8 +61,8 @@ import com.readsense.media.rtsp.widget.media.IjkVideoView;
 import cn.readsense.body.ReadBody;
 import io.reactivex.Flowable;
 import io.reactivex.disposables.Disposable;
-import io.reactivex.functions.Consumer;
 import io.reactivex.functions.Function;
+import retrofit2.Call;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 import tv.danmaku.ijk.media.player.misc.ITrackInfo;
 
@@ -63,12 +72,9 @@ import com.readsense.media.rtsp.content.RecentMediaStorage;
 import com.readsense.media.rtsp.fragments.TracksFragment;
 import com.readsense.media.rtsp.widget.media.MeasureHelper;
 
-import org.reactivestreams.Publisher;
-
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -77,9 +83,12 @@ import java.util.concurrent.TimeUnit;
 
 import static io.reactivex.schedulers.Schedulers.io;
 import static io.reactivex.schedulers.Schedulers.newThread;
+import static io.reactivex.schedulers.Schedulers.single;
 
 public class VideoActivity extends AppCompatActivity implements TracksFragment.ITrackHolder {
     private static final String TAG = "VideoActivity";
+
+    public static final int MSG_HEART_BEAT = 1;
 
     private String mVideoPath;
     private Uri mVideoUri;
@@ -96,6 +105,8 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
 
     private RectanglesView mRectanglesView;
 
+    private final MyHandler mHander = new MyHandler(this);
+
     private BroadcastReceiver mReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -108,51 +119,58 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
             0L, TimeUnit.MILLISECONDS,
             new ArrayBlockingQueue<Runnable>(1));
 
-    private void uploadCachedFile(Context context) {
-        ConnectivityManager manager = (ConnectivityManager) context
+
+    private boolean isNetworkAvailable() {
+        ConnectivityManager manager = (ConnectivityManager) App.sInstance
                 .getSystemService(Context.CONNECTIVITY_SERVICE);
-        if (manager == null) return;
+        if (manager == null) return false;
         NetworkInfo activeNetwork = manager.getActiveNetworkInfo();
         if (activeNetwork != null) { // connected to the internet
             if (activeNetwork.isConnected()) {
-                        /*if (activeNetwork.getType() == ConnectivityManager.TYPE_WIFI) {
-
-                        } else if (activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE) {
-
-                        }*/
-                        try {
-                            WORKER.execute(new Runnable() {
-                                @Override
-                                public void run() {
-                                    final CameraUpload cameraUpload = new CameraUpload();
-                                    File file = getExternalCacheDir();
-                                    File[] files = file.listFiles();
-                                    int size = files.length;
-                                    for (int i=0; i < size; i++) {
-                                        File file1 = files[i];
-                                        final String json = cameraUpload.readJsonFromFile(file1);
-                                        boolean result = cameraUpload.upload(json);
-                                        if (result) {
-                                            file1.delete();
-                                        }
-                                    }
-
-                                }
-                            });
-                        } catch (RejectedExecutionException e) {
-                            Log.d(TAG, "is busy");
-                        }
-
-
+                App.isNetworkAvailable = true;
+                return true;
             } else {
                 Log.e(TAG, "当前没有网络连接，请确保你已经打开网络 ");
+                return false;
             }
 
-
         } else {   // not connected to the internet
-
+            App.isNetworkAvailable = false;
+            return false;
         }
+    }
 
+    private void uploadCachedFile(Context context) {
+        if (isNetworkAvailable()) {
+            App.isNetworkAvailable = true;
+            try {
+                WORKER.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        final CameraUpload cameraUpload = new CameraUpload();
+                        File file = getExternalCacheDir();
+                        File[] files = file.listFiles();
+                        int size = files.length;
+                        for (int i=0; i < size; i++) {
+                            File file1 = files[i];
+                            if (!file1.getName().endsWith(".json")) {
+                                continue;
+                            }
+                            final String json = cameraUpload.readJsonFromFile(file1);
+                            boolean result = cameraUpload.upload(json);
+                            if (result) {
+                                file1.delete();
+                            }
+                        }
+
+                    }
+                });
+            } catch (RejectedExecutionException e) {
+                Log.d(TAG, "is busy");
+            }
+        } else {
+            App.isNetworkAvailable = false;
+        }
     }
 
     public static Intent newIntent(Context context, String videoPath, String videoTitle) {
@@ -247,15 +265,17 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
             return;
         }
         mVideoView.start();
-        //long result = ReadBody.nativeCreateObject(this);
-        long result = ReadBody.nativeCreateObjectWithLicense(this,
+        mHander.sendEmptyMessage(MSG_HEART_BEAT);
+        long result = ReadBody.nativeCreateObject(this);
+        /*long result = ReadBody.nativeCreateObjectWithLicense(this,
                 "ffb601a7a83ad2d1279a29d40e2c4247",
-                "8502ed184f17b9b8ff7abf09af63759dba103d69");
+                "8502ed184f17b9b8ff7abf09af63759dba103d69");*/
+        long result2 = ReadBody.nativeBodySenseInit(this);
         App.isDetectorDestroy = false;
-        if (result == 0) {
+        if (result == 0 && result2 == 2) {
             Log.d(TAG, "init body track success " + result);
         } else {
-            Log.d(TAG, "init body track failed " + result);
+            Log.d(TAG, "init body track failed " + result + " " + result2);
         }
 
     }
@@ -267,6 +287,8 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
         registerReceiver(mReceiver, intentFilter);
         //when start upload cached file
         uploadCachedFile(this);
+        /*String test = null;
+        test.length();*/
     }
 
     @Override
@@ -302,6 +324,7 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
         App.isDetectorDestroy = true;
         synchronized (App.LOCK) {
             ReadBody.nativeDestroyObject();
+            ReadBody.nativeBodySenseUnInit();
         }
     }
 
@@ -379,5 +402,66 @@ public class VideoActivity extends AppCompatActivity implements TracksFragment.I
             return -1;
 
         return mVideoView.getSelectedTrack(trackType);
+    }
+
+    private void heartBeat() {
+        Log.d(TAG, "heartBeat");
+        Disposable disposable = Flowable.just(new Object()).subscribeOn(single()).map(new Function<Object, Object>() {
+            @Override
+            public Object apply(Object o) {
+                RequestEnvelope requestEnvelop = new RequestEnvelope();
+                RequestBody requestBody = new RequestBody();
+                RequestModel requestModel = new RequestModel();
+                requestModel.cameraID = WifiUtil.getMacAddress(VideoActivity.this);
+                requestModel.Heartbeat = "http://tempuri.org/";
+                requestBody.Heartbeat = requestModel;
+                requestEnvelop.body = requestBody;
+                if (isNetworkAvailable()) {
+                    Call<ResponseEnvelope> call = BackendHelper.getService().heartBeat(requestEnvelop);
+                    ResponseEnvelope responseEnvelope = null;
+                    try {
+                        responseEnvelope = call.execute().body();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        mHander.sendEmptyMessageDelayed(MSG_HEART_BEAT, 5 * 60 * 1000);
+                        return new Object();
+                    }
+                    if (responseEnvelope != null) {
+                /*String result = responseEnvelope.body.HeartbeatResponse.result;
+                Log.d(TAG, "onResponse " + result);*/
+                        Log.d(TAG, "heartbeat success");
+                        mHander.sendEmptyMessageDelayed(MSG_HEART_BEAT, 60 * 60 * 1000);
+                        return new Object();
+                    }
+
+                }
+                mHander.sendEmptyMessageDelayed(MSG_HEART_BEAT, 5 * 60 * 1000);
+                return new Object();
+            }
+        }).subscribe();
+
+    }
+
+
+    private static class MyHandler extends Handler {
+        private WeakReference<VideoActivity> mOuter;
+
+        MyHandler(VideoActivity outer) {
+            mOuter = new WeakReference<>(outer);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            VideoActivity outer = mOuter.get();
+            if (outer == null) return;
+            switch (msg.what) {
+                case MSG_HEART_BEAT:
+                    outer.heartBeat();
+                    break;
+                default:
+                    throw new UnsupportedOperationException("wtf, unsupported");
+            }
+        }
     }
 }
